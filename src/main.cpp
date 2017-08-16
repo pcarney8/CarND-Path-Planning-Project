@@ -243,9 +243,41 @@ int main() {
 		//size of the previous path to help smoothly transition to next set of points
           	int prev_size = previous_path_x.size();
 	
-		//Finite State Machine
+		//update car position due to latency
+		if (prev_size > 0){
+			car_s = end_path_s;
+		}
 
-		//Spline Interpolation to smooth paths
+		//Finite State Machine****************************************
+		bool too_close = false;
+
+		for(int i = 0; i < sensor_fusion.size(); i++){
+			float d = sensor_fusion[i][6];
+			if (d < (2 + 4*lane + 2) && d > (2 + 4*lane - 2)){
+				double vx = sensor_fusion[i][3];
+				double vy = sensor_fusion[i][4];
+				//magnitude of the velocity vector of this other car
+				double check_speed = sqrt(vx*vx + vy*vy);
+				double check_car_s = sensor_fusion[i][5];
+
+				//TODO: projecting the s value out in time because of latency (is latency the right word?)
+				check_car_s += ((double) prev_size * .02 * check_speed);
+				
+				if ((check_car_s > car_s) && (check_car_s - car_s < 30)){
+					ref_vel = 29.5;
+					//TODO: more logic here, prepare lane change, slow down, etc.
+				}
+			}
+
+			
+
+
+
+		}		
+		
+		//End Finite State Machine************************************
+
+		//Spline Interpolation to smooth paths*************************
 		
 		//vectors of waypoints to include some widely spaced for spline interpolation
 		vector<double> ptsx;
@@ -356,6 +388,7 @@ int main() {
 
 		}
 
+		//End Spline Interpolation*********************************
 
 		//put values back in json and send back to simulator
 		json msgJson;
