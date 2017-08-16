@@ -1,6 +1,10 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
-   
+
+### Model Documentation
+My model first takes in the sensor fusion data with combinational logic to set the `lane` and `ref_vel` of the ego vehicle. It checks cars that are directly ahead of it, and to the sides with a buffer zone on the sides. The average length of a car is approximately 5 meters, so I almost doubled that to account for cars slightly behind my vehicle on the right or left. If there is a vehicle too close directly in front it sets a flag `too_close` to true, and also saves their velocity to use as a reference to help maintain a speed similar to theirs. It has simliar flags `safe_right` and `safe_left` to account for cars in the left and right lane. I then use a set of logic with my three flags `too_close`, `safe_left`, and `safe_right` to determine the appropriate behavior, change lane, slow down or stay in lane. The rest of my implementation is very similar to the walkthrough. I'm using a spline interpolation of points with reference waypoints set 30 meters ahead to smooth out the spline.
+
+    
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases).
 
