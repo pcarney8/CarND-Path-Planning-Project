@@ -201,9 +201,14 @@ int main() {
   int lane = 1;
 
   //Reference velocity that we want the car to go
-  double ref_vel = 49.5;
+  double ref_vel = 0.0;
 
-  h.onMessage([&lane,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  //set an acceleration/decceleration limit on the car
+  double car_accel_limit = 0.224;
+
+  //buffer for lane change
+  double buffer = 9.0;  
+  h.onMessage([&buffer,&car_accel_limit,&lane,&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -230,6 +235,8 @@ int main() {
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
 
+//		cout << "lane: " << lane << endl;
+
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
@@ -250,30 +257,84 @@ int main() {
 
 		//Finite State Machine****************************************
 		bool too_close = false;
+		bool safe_left = true;
+		bool safe_right = true;
+		double too_close_speed;
+//		vector<vector<double>> cars_left_front;
+//		vector<vector<double>> cars_right_front;
 
 		for(int i = 0; i < sensor_fusion.size(); i++){
 			float d = sensor_fusion[i][6];
-			if (d < (2 + 4*lane + 2) && d > (2 + 4*lane - 2)){
-				double vx = sensor_fusion[i][3];
-				double vy = sensor_fusion[i][4];
-				//magnitude of the velocity vector of this other car
-				double check_speed = sqrt(vx*vx + vy*vy);
-				double check_car_s = sensor_fusion[i][5];
-
-				//TODO: projecting the s value out in time because of latency (is latency the right word?)
-				check_car_s += ((double) prev_size * .02 * check_speed);
+			double vx = sensor_fusion[i][3];
+			double vy = sensor_fusion[i][4];
+			//magnitude of the velocity vector of this other car
+			double check_speed = sqrt(vx*vx + vy*vy);
+			double check_car_s = sensor_fusion[i][5];
 				
+                        //TODO: projecting the s value out in time because of latency (is latency the right word?)
+			check_car_s += ((double) prev_size * .02 * check_speed);
+	
+			//check car in my lane
+			if (d > (2 + 4*lane - 2) && d < (2 + 4*lane + 2) ){
+			
 				if ((check_car_s > car_s) && (check_car_s - car_s < 30)){
-					ref_vel = 29.5;
+					too_close_speed = check_speed; //double check that check_speed is actually what i want to use here
+					too_close = true;
 					//TODO: more logic here, prepare lane change, slow down, etc.
 				}
 			}
-
 			
+			//check car left 
+			if (d < (2 + 4*lane - 2) && d > (2 + 4*(lane - 1) - 2)){
+				//check to see if car is next to us or ahead of us
+				if ((check_car_s >= car_s - buffer) && (check_car_s - car_s < 30)){
+					//cars_left_front.push_back(sensor_fusion[i]);
+					safe_left = false;
+				}
+			}
+			//check car right
+			if (d > (2 + 4*lane + 2) && d < (2 + 4*(lane + 1) + 2) ){
+				//check to see if car is next to us or ahead of us
+				if ((check_car_s >= car_s - buffer) && (check_car_s - car_s < 30)){
+					safe_right = false;
+				}
+			}
+		}	
 
-
-
-		}		
+		if (too_close && !safe_left && !safe_right) {
+			if (too_close_speed == ref_vel){
+				ref_vel = too_close_speed;
+			}else{
+				ref_vel -= car_accel_limit;
+			}
+		//car right
+		}else if (too_close && safe_left && !safe_right){ 
+			if(lane > 0){
+				lane -= 1;
+				ref_vel += car_accel_limit;
+			}else{
+				ref_vel -= car_accel_limit;
+			}
+		//car left
+		}else if (too_close && !safe_left && safe_right){
+			if(lane < 2){
+				lane += 1;
+				ref_vel += car_accel_limit;
+			}else{
+				ref_vel -= car_accel_limit;
+			}
+		}else if (too_close && safe_left && safe_right){
+			if(lane >= 1){
+				lane -= 1;
+			}else{
+				lane += 1;
+			}
+			ref_vel += car_accel_limit;
+		}else if (!too_close && ref_vel < 49.5){
+			ref_vel += car_accel_limit;
+		}else if (!too_close && safe_right && safe_left){
+			//do nothing?
+		}
 		
 		//End Finite State Machine************************************
 
